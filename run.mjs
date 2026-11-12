@@ -37,7 +37,8 @@ if (!j.repoUrl || !j.commit || !j.baseCommit) await finish({ error: 'repoUrl, co
 let host = '';
 try { host = new URL(j.repoUrl).hostname; } catch { /* checked below */ }
 if (!j.repoUrl.startsWith('https://') || !ALLOWED_HOSTS.includes(host)) await finish({ error: 'repo must be an https GitHub or GitLab URL' });
-if (!/^[0-9a-f]{7,40}$/i.test(j.commit) || !/^[0-9a-f]{7,40}$/i.test(j.baseCommit)) await finish({ error: 'commit and baseCommit must be commit hashes' });
+const REF = /^[A-Za-z0-9][A-Za-z0-9._\/-]{0,99}$/;
+if (!REF.test(j.commit) || !REF.test(j.baseCommit)) await finish({ error: 'commit and baseCommit must be a commit hash or branch name' });
 
 const dir = await mkdtemp(path.join(tmpdir(), 'agora-'));
 const repo = path.join(dir, 'repo');
