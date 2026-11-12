@@ -1,0 +1,56 @@
+# AGORA test runner on GitHub Actions.
+# n8n starts this workflow through the GitHub API, the delivery is tested on a fresh VM,
+# and the result is POSTed back to n8n's resume URL. The VM is thrown away afterwards.
+name: agora-run
+run-name: agora run ${{ inputs.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      payload:
+        description: "Base64 JSON: repoUrl, commit, baseCommit, testCommand, buildCommand, testFiles"
+        required: true
+      callback:
+        description: "n8n resume URL"
+        required: true
+      run_id:
+        description: "n8n execution id, for the run name only"
+        required: false
+
+# This workflow needs no GitHub token rights.
+permissions: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pull test image
+        run: docker pull node:22-bookworm
+
+      # Seller code only ever runs inside Docker containers started by run.mjs.
+      # No secret is visible to this step.
+      - name: Test the delivery
+        env:
+          PAYLOAD: ${{ inputs.payload }}
+        run: node run.mjs
+
+      - name: Send the result to n8n
+        if: always()
+        env:
+          CALLBACK: ${{ inputs.callback }}
+          SECRET: ${{ secrets.RUNNER_CALLBACK_SECRET }}
+        run: |
+          if [ ! -f result.json ]; then echo '{"error":"internal","logTail":"runner crashed before writing a result"}' > result.json; fi
+          curl -sS --fail-with-body --retry 3 -X POST "$CALLBACK" \
+            -H "content-type: application/json" \
+            -H "x-agora-secret: $SECRET" \
+            --data-binary @result.json
